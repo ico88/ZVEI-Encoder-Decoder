@@ -14,7 +14,7 @@ ZVEI_FREQUENCIES = {
 # --- PARAMETRI CRI AGGIORNATI ---
 SAMPLE_RATE = 44100  # Frequenza di campionamento (Hz)
 TONE_DURATION = 0.070 # Durata di ciascun tono (secondi, AGGIORNATO)
-TONE_PAUSE = 0.020   # Pausa tra i toni (secondi, tipico CRI)
+TONE_PAUSE = 0.020   # Pausa tra i toni (secondi)
 MAX_SELECTIVE_LENGTH = 6 # Lunghezza fissa richiesta (6 toni)
 # ---------------------------------
 
