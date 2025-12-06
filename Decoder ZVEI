@@ -1,0 +1,145 @@
+import numpy as np
+from scipy.io import wavfile
+from google.colab import files
+import ipywidgets as widgets
+import os
+import math
+
+# Le frequenze ZVEI 2 (solo quelle numeriche)
+ZVEI_FREQUENCIES_MAP = {
+    1060: '1', 1160: '2', 1270: '3', 1400: '4', 1530: '5',
+    1670: '6', 1830: '7', 2000: '8', 2200: '9', 2400: '0',
+}
+ZVEI_TONES = sorted(ZVEI_FREQUENCIES_MAP.keys())
+
+# --- PARAMETRI OTTIMIZZATI ---
+SAMPLE_RATE = 44100
+TONE_DURATION = 0.070
+TONE_PAUSE = 0.020
+
+# WINDOW_SIZE: Copre solo il tono (0.070s)
+WINDOW_SIZE = int(TONE_DURATION * SAMPLE_RATE)
+
+# Avanzamento Aggressivo e Stabile: Copre esattamente Tono + Pausa
+ADVANCE_STEP = int((TONE_DURATION + TONE_PAUSE) * SAMPLE_RATE)
+# Passo cauto per lo scorrimento nel silenzio
+ANALYSIS_STEP_CAUTIOUS = int(WINDOW_SIZE / 4)
+# -------------------------------------------------------------------
+
+def goertzel_detect(segment, sample_rate, tone_freqs):
+    """
+    Algoritmo di Goertzel per la rilevazione ad alta efficienza con soglia alta.
+    """
+    N = len(segment)
+    max_abs_val = np.max(np.abs(segment))
+    if max_abs_val == 0:
+        return None
+
+    segment_norm = segment / max_abs_val
+
+    max_power = 0
+    detected_freq = 0
+    # SOGLIA AUMENTATA
+    MIN_GOERTZEL_POWER_THRESHOLD = 12.0 # Mantenuto alto per ridurre falsi positivi
+
+    for target_freq in tone_freqs:
+        k = int(0.5 + N * target_freq / sample_rate)
+        w = 2.0 * np.pi * k / N
+        cos_w = math.cos(w)
+        coeff = 2.0 * cos_w
+
+        s1 = 0.0
+        s2 = 0.0
+
+        for sample in segment_norm:
+            s0 = sample + coeff * s1 - s2
+            s2 = s1
+            s1 = s0
+
+        power = s1**2 + s2**2 - coeff * s1 * s2
+
+        if power > max_power:
+            max_power = power
+            detected_freq = target_freq
+
+    if max_power > MIN_GOERTZEL_POWER_THRESHOLD:
+        return detected_freq
+    else:
+        return None
+
+def decode_zvei(filepath):
+    """
+    Decodifica la sequenza di 6 toni ZVEI 2 con avanzamento cautelativo costante.
+    """
+    print(f"Inizio decodifica del file: **{filepath}**")
+    try:
+        sample_rate, data = wavfile.read(filepath)
+    except FileNotFoundError:
+        print("ERRORE: File non trovato.")
+        return
+
+    if data.ndim > 1:
+        data = data[:, 0]
+    data = data.astype(np.float64)
+
+    raw_detected_sequence = []
+
+    i = 0
+
+    while i + WINDOW_SIZE < len(data):
+        segment = data[i:i + WINDOW_SIZE]
+        freq = goertzel_detect(segment, sample_rate, ZVEI_TONES)
+
+        if freq is not None:
+            tone_char = ZVEI_FREQUENCIES_MAP.get(freq, '?')
+            # Sempre aggiungi il tono rilevato e avanza aggressivamente
+            raw_detected_sequence.append(tone_char)
+            i += ADVANCE_STEP # Sposta oltre il tono corrente e la sua pausa
+        else:
+            # Nessun tono rilevato, avanza cautamente per trovare l'inizio del prossimo tono
+            i += ANALYSIS_STEP_CAUTIOUS
+
+    # --- Post-Elaborazione per estrarre i primi 6 toni numerici ---
+    # Filtra solo i toni numerici
+    numeric_tones_detected = [char for char in raw_detected_sequence if char.isdigit()]
+
+    final_selective = "NON DECIFRATA"
+
+    # MAX_SELECTIVE_LENGTH is from a previous cell, assumed to be 6.
+    if len(numeric_tones_detected) > MAX_SELECTIVE_LENGTH:
+        # Se vengono rilevati esattamente MAX_SELECTIVE_LENGTH + 1 toni (es. 7 per 6)
+        # e la sequenza è del tipo XXXXXXX, si assume che il primo tono sia spurio.
+        if len(numeric_tones_detected) == MAX_SELECTIVE_LENGTH + 1:
+            final_selective = "".join(numeric_tones_detected[1:]) # Rimuove il primo tono
+        else: # Altrimenti, se ci sono troppi toni o un pattern diverso, prendiamo i primi MAX_SELECTIVE_LENGTH
+            final_selective = "".join(numeric_tones_detected[:MAX_SELECTIVE_LENGTH])
+    elif len(numeric_tones_detected) == MAX_SELECTIVE_LENGTH:
+        final_selective = "".join(numeric_tones_detected)
+    else:
+        final_selective = f"NON DECIFRATA (Trovati solo {len(numeric_tones_detected)} toni: {''.join(numeric_tones_detected)})"
+
+
+    print(f"\n✨ Risultato della Decodifica ✨")
+    print(f"Sequenza di toni rilevata (raw): {' '.join(raw_detected_sequence)}") # Stampa raw detected per debugging
+    print(f"Sequenza di toni numerici filtrata: {' '.join(numeric_tones_detected)}")
+    print(f"Selettiva ZVEI 2 Decifrata: **{final_selective}**")
+
+
+# --- Interfaccia Utente ---
+FILENAME_TO_DECODE = "selettiva_generata.wav"
+
+decode_button = widgets.Button(description=f"Decodifica Audio Salvato ({FILENAME_TO_DECODE})")
+output_area_decode = widgets.Output()
+
+def on_decode_button_clicked(b):
+    with output_area_decode:
+        output_area_decode.clear_output()
+        if os.path.exists(FILENAME_TO_DECODE):
+            decode_zvei(FILENAME_TO_DECODE)
+        else:
+            print(f"ERRORE: File '{FILENAME_TO_DECODE}' non trovato. Riprova a generare l'audio nel Blocco 1.")
+
+decode_button.on_click(on_decode_button_clicked)
+
+print("### Decodificatore di Sequenze Tonali ZVEI 2 (Ottimizzazione Finale del Salto)")
+display(decode_button, output_area_decode)
