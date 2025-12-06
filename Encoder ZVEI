@@ -1,0 +1,111 @@
+import numpy as np
+from scipy.io.wavfile import write
+from IPython.display import Audio, display
+import ipywidgets as widgets
+from google.colab import files
+import os
+
+# Frequenze standard del protocollo ZVEI 2
+ZVEI_FREQUENCIES = {
+    '1': 1060, '2': 1160, '3': 1270, '4': 1400, '5': 1530,
+    '6': 1670, '7': 1830, '8': 2000, '9': 2200, '0': 2400,
+}
+
+# --- PARAMETRI CRI AGGIORNATI ---
+SAMPLE_RATE = 44100  # Frequenza di campionamento (Hz)
+TONE_DURATION = 0.070 # Durata di ciascun tono (secondi, AGGIORNATO)
+TONE_PAUSE = 0.020   # Pausa tra i toni (secondi)
+MAX_SELECTIVE_LENGTH = 6 # Lunghezza fissa richiesta (6 toni)
+# ---------------------------------
+
+def generate_tone(frequency, duration, sample_rate):
+    """Genera una forma d'onda sinusoidale per una data frequenza e durata."""
+    t = np.linspace(0., duration, int(sample_rate * duration), endpoint=False)
+    waveform = 0.5 * np.sin(2. * np.pi * frequency * t)
+    window = np.hanning(len(waveform))
+    return waveform * window
+
+def generate_zvei_selective(selective_code, pre_silence_sec, post_silence_sec, output_filename="selettiva_generata.wav"):
+    """Genera il file audio ZVEI 2 con 6 toni puri e senza Start/Reset."""
+    audio_data = []
+
+    # 1. Silenzio iniziale
+    pre_silence_samples = int(pre_silence_sec * SAMPLE_RATE)
+    audio_data.append(np.zeros(pre_silence_samples))
+
+    # 2. Sequenza ZVEI: Solo i 6 toni numerici
+    full_sequence = selective_code.upper()
+
+    print(f"Generazione della sequenza tonale (70ms per tono): {full_sequence}")
+
+    for i, tone_char in enumerate(full_sequence):
+        if tone_char in ZVEI_FREQUENCIES:
+            freq = ZVEI_FREQUENCIES[tone_char]
+            tone = generate_tone(freq, TONE_DURATION, SAMPLE_RATE)
+            audio_data.append(tone)
+
+            # Aggiunge una pausa solo tra i toni (non dopo l'ultimo tono)
+            if i < len(full_sequence) - 1:
+                 pause_samples = int(TONE_PAUSE * SAMPLE_RATE)
+                 audio_data.append(np.zeros(pause_samples))
+        else:
+            print(f"AVVISO: Carattere non valido '{tone_char}' ignorato.")
+
+    # 3. Silenzio finale
+    post_silence_samples = int(post_silence_sec * SAMPLE_RATE)
+    audio_data.append(np.zeros(post_silence_samples))
+
+    # 4. Concatena e salva
+    final_audio = np.concatenate(audio_data)
+    audio_int16 = (final_audio * 32767).astype(np.int16)
+    write(output_filename, SAMPLE_RATE, audio_int16)
+
+    print(f"\n✅ Audio generato e salvato come: **{output_filename}**")
+    print(f"Durata toni totali: {len(full_sequence) * (TONE_DURATION + TONE_PAUSE) - TONE_PAUSE:.3f} secondi")
+
+    display(Audio(data=final_audio, rate=SAMPLE_RATE))
+
+
+# --- Interfaccia Utente ---
+selective_input = widgets.Text(
+    value='123456',
+    description='Selettiva (6 toni):',
+    style={'description_width': 'initial'},
+    layout=widgets.Layout(width='300px')
+)
+pre_silence_input = widgets.FloatText(
+    value=0.5, # Ridotto il default
+    min=0.0,
+    description='Silenzio Iniziale (sec):',
+    style={'description_width': 'initial'},
+    layout=widgets.Layout(width='300px')
+)
+post_silence_input = widgets.FloatText(
+    value=0.5, # Ridotto il default
+    min=0.0,
+    description='Silenzio Finale (sec):',
+    style={'description_width': 'initial'},
+    layout=widgets.Layout(width='300px')
+)
+
+generate_button = widgets.Button(description="Genera Audio")
+output_area = widgets.Output()
+
+def on_generate_button_clicked(b):
+    with output_area:
+        output_area.clear_output()
+        selective = selective_input.value.strip()
+        pre_silence = pre_silence_input.value
+        post_silence = post_silence_input.value
+
+        if not selective.isdigit() or len(selective) != MAX_SELECTIVE_LENGTH:
+            print(f"ERRORE: La selettiva deve essere composta esattamente da {MAX_SELECTIVE_LENGTH} cifre numeriche.")
+            return
+
+        filename = "selettiva_generata.wav"
+        generate_zvei_selective(selective, pre_silence, post_silence, filename)
+
+generate_button.on_click(on_generate_button_clicked)
+
+print("### Generatore di Sequenze Tonali ZVEI 2 (70ms - 6 Toni Puri)")
+display(selective_input, pre_silence_input, post_silence_input, generate_button, output_area)
