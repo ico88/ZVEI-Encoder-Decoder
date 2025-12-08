@@ -1,0 +1,25 @@
+import os
+!pip install pydub
+!apt-get install ffmpeg
+from pydub import AudioSegment
+from google.colab import files
+
+def convert_m4a_to_wav(input_file_path, output_file_path):
+    """Converte un file audio da M4A a WAV."""
+    if not os.path.exists(input_file_path):
+        print(f"ERRORE: Il file di input '{input_file_path}' non esiste.")
+        return
+
+    try:
+        # Carica il file M4A
+        audio = AudioSegment.from_file(input_file_path, format="m4a")
+        # Esporta in formato WAV
+        audio.export(output_file_path, format="wav")
+        print(f"\n✅ Conversione completata: '{input_file_path}' convertito in '{output_file_path}'")
+    except Exception as e:
+        print(f"ERRORE durante la conversione: {e}")
+
+print("### Convertitore da M4A a WAV")
+print("Esegui questa cella per installare le dipendenze e definire la funzione `convert_m4a_to_wav`.")
+print("Una volta completato, puoi caricare un file .m4a e usarla così:")
+print("convert_m4a_to_wav('nome_tuo_file.wav', 'nome_tuo_file.wav')")
