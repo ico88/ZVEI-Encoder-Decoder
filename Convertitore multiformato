@@ -1,0 +1,76 @@
+import os
+import glob # Per trovare il file caricato
+from google.colab import files
+from pydub import AudioSegment
+
+# Installazione delle dipendenze (necessario per Colab e pydub)
+print("📦 Installazione delle dipendenze (pydub e ffmpeg)...")
+!pip install -q pydub
+!apt-get install -qq ffmpeg
+
+def convert_to_wav(input_file_path, output_filename="converted_output.wav"):
+    """
+    Carica un file audio (M4A, MP3, ecc.), ne determina il formato e lo converte in WAV.
+    """
+    if not os.path.exists(input_file_path):
+        print(f"ERRORE: Il file di input '{input_file_path}' non esiste.")
+        return None
+
+    # Determina il formato di input dall'estensione
+    input_format = input_file_path.split('.')[-1].lower()
+
+    if input_format not in ['m4a', 'mp3', 'ogg', 'flac']:
+        print(f"ATTENZIONE: Il formato '{input_format}' potrebbe non essere supportato o non è stato testato.")
+
+    try:
+        # Carica il file audio usando il formato rilevato
+        audio = AudioSegment.from_file(input_file_path, format=input_format)
+        
+        # Esporta in formato WAV
+        audio.export(output_filename, format="wav")
+        print(f"\n✅ Conversione completata!")
+        print(f"File di input: **{input_file_path}** (Formato: {input_format})")
+        print(f"File di output: **{output_filename}** (Formato: WAV)")
+        return output_filename
+        
+    except Exception as e:
+        print(f"ERRORE durante la conversione (Verifica il formato e la validità del file): {e}")
+        return None
+
+def automatic_converter():
+    """
+    Gestisce l'interfaccia utente per il caricamento del file e avvia la conversione.
+    """
+    # Rimuove i file WAV vecchi per pulizia
+    for f in glob.glob("*.wav"):
+        os.remove(f)
+
+    print("\n-------------------------------------------")
+    print("👉 Seleziona il tuo file audio (.m4a, .mp3, .ogg, .flac) per convertirlo in WAV:")
+    
+    # Widget di caricamento file
+    uploaded = files.upload()
+    
+    if not uploaded:
+        print("\nNessun file selezionato o caricamento annullato.")
+        return
+
+    # Prende il nome del file appena caricato (sarà l'unica chiave)
+    input_file_path = list(uploaded.keys())[0]
+    
+    # Genera il nome del file di output (stesso nome, ma .wav)
+    base_name = os.path.splitext(input_file_path)[0]
+    output_file_path = f"{base_name}.wav"
+    
+    # Avvia la conversione
+    converted_path = convert_to_wav(input_file_path, output_file_path)
+    
+    if converted_path:
+        print("\nPuoi ora usare il file convertito nel tuo decodificatore ZVEI.")
+        
+        # Aggiungi un link per scaricare il file
+        print(f"Scarica il file convertito: **{converted_path}**")
+
+# --- Avvio del Convertitore ---
+print("### 🎧 Convertitore Universale a WAV in Colab")
+automatic_converter()
